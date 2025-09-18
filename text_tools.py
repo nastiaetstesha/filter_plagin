@@ -1,4 +1,9 @@
-import pymorphy2
+try:
+    import pymorphy3 as pymorphy2  # подменяем имя, чтобы тесты не менять
+except ImportError:
+    import pymorphy2
+
+'''AttributeError: module 'inspect' has no attribute 'getargspec'. Did you mean: 'getargs'?'''
 import string
 
 
