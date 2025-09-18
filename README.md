@@ -34,6 +34,4 @@ python -m pytest adapters/inosmi_ru.py
 python -m pytest text_tools.py
 ```
 
-# Цели проекта
 
-Код написан в учебных целях. Это урок из курса по веб-разработке — [Девман](https://dvmn.org).
