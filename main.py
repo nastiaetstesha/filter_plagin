@@ -11,6 +11,7 @@ import pymorphy3
 from adapters import SANITIZERS, ArticleNotFound
 from text_tools import split_by_words, calculate_jaundice_rate
 from enum import Enum
+from async_timeout import timeout as async_timeout
 
 
 # CHARGED_WORDS = ["скандал", "шок", "сенсация", "катастрофа", "позор", "триумф", "отстаивать", "санкции"]
@@ -18,7 +19,10 @@ class ProcessingStatus(Enum):
     OK = "OK"
     FETCH_ERROR = "FETCH_ERROR"
     PARSE_ERROR = "PARSE_ERROR"
+    TIMEOUT = "TIMEOUT"
 
+
+REQUEST_TIMEOUT = 0.05
 
 DICT_DIR = Path(__file__).resolve().parent / "charged_dict"
 
@@ -95,8 +99,13 @@ async def process_article(session, morph, charged_words, url: str, idx: int, res
         "title": None, "score": None, "words_count": None
     }
     try:
-        html = await fetch(session, url)
-    except (aiohttp.ClientError, asyncio.TimeoutError) as e:
+        async with async_timeout(REQUEST_TIMEOUT):
+            html = await fetch(session, url)
+    except asyncio.TimeoutError:
+        record["status"] = ProcessingStatus.TIMEOUT.value
+        results.append(record)
+        return
+    except (aiohttp.ClientError, asyncio.CancelledError):
         record["status"] = ProcessingStatus.FETCH_ERROR.value
         results.append(record)
         return
