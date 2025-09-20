@@ -79,26 +79,49 @@ def extract_title(html: str) -> str:
     return (title or "").strip() or "Без заголовка"
 
 
-async def process_article(session, morph, charged_words, url: str):
+async def process_article(session, morph, charged_words, url: str, idx: int, results: list):
+    """Качает, чистит, считает и КЛАДЁТ результат в results (ничего не печатает)."""
+    record = {"idx": idx, "url": url, "ok": False}
     try:
         html = await fetch(session, url)
         title = extract_title(html)
-
         sanitize = pick_sanitizer(url)
         text = sanitize(html, plaintext=True)
-
         article_words = split_by_words(morph, text)
         score = calculate_jaundice_rate(article_words, charged_words)
 
-        print(f"URL: {url}")
-        print(f"Заголовок: {title}")
-        print(f"Рейтинг: {score:.2f}")
-        print(f"Слов в статье: {len(article_words)}")
-        print()
+        record.update({
+            "ok": True,
+            "title": title,
+            "score": score,
+            "words_count": len(article_words),
+        })
     except ArticleNotFound:
-        print(f"URL: {url}\nОшибка: контейнер статьи не найден\n")
+        record.update({"error": "контейнер статьи не найден"})
     except Exception as e:
-        print(f"URL: {url}\nОшибка: {e}\n")
+        record.update({"error": str(e)})
+
+    results.append(record)
+# async def process_article(session, morph, charged_words, url: str):
+#     try:
+#         html = await fetch(session, url)
+#         title = extract_title(html)
+
+#         sanitize = pick_sanitizer(url)
+#         text = sanitize(html, plaintext=True)
+
+#         article_words = split_by_words(morph, text)
+#         score = calculate_jaundice_rate(article_words, charged_words)
+
+#         print(f"URL: {url}")
+#         print(f"Заголовок: {title}")
+#         print(f"Рейтинг: {score:.2f}")
+#         print(f"Слов в статье: {len(article_words)}")
+#         print()
+#     except ArticleNotFound:
+#         print(f"URL: {url}\nОшибка: контейнер статьи не найден\n")
+#     except Exception as e:
+#         print(f"URL: {url}\nОшибка: {e}\n")
 
 
 async def main():
@@ -119,10 +142,22 @@ async def main():
     if not charged_words:
         raise SystemExit(f"Словарь пуст. Положи .txt файлы в {DICT_DIR}")
 
+    results: list[dict] = []
+
     async with aiohttp.ClientSession() as session:
         async with create_task_group() as tg:
-            for url in TEST_ARTICLES:
-                tg.start_soon(process_article, session, morph, charged_words, url)
+            for idx, url in enumerate(TEST_ARTICLES):
+                tg.start_soon(process_article, session, morph, charged_words, url, idx, results)
+
+    for rec in sorted(results, key=lambda r: r["idx"]):
+        print(f"URL: {rec['url']}")
+        if rec["ok"]:
+            print(f"Заголовок: {rec['title']}")
+            print(f"Рейтинг: {rec['score']:.2f}")
+            print(f"Слов в статье: {rec['words_count']}")
+        else:
+            print(f"Ошибка: {rec.get('error', 'неизвестно')}")
+        print()
 
 
 asyncio.run(main())
