@@ -25,7 +25,9 @@ DICT_DIR = Path(__file__).resolve().parent / "charged_dict"
 TEST_ARTICLES = [
     'https://inosmi.ru/20250920/svo-274757749.html',
     # 'https://inosmi.ru/20250920/oshibki-274752226.html',
-    'https://inosmi/html'
+    'https://inosmi/html',
+    'https://anyio.readthedocs.io/en/latest/tasks.html',
+    'https://lenta.ru/news/2025/09/20/v-germanii-predlozhili-sozdat-armiyu-bpla-posle-intsidenta-s-dronami-v-polshe/',
     'https://inosmi.ru/20250918/vss-274729939.html',
     'https://inosmi.ru/20250920/frantsiya-274764708.html',
     'https://inosmi.ru/20250920/iskusstvo-274760103.html'
@@ -112,7 +114,7 @@ async def process_article(session, morph, charged_words, url: str, idx: int, res
             "score": score,
             "words_count": len(article_words),
         })
-    except ArticleNotFound:
+    except (ValueError, ArticleNotFound):
         record["status"] = ProcessingStatus.PARSE_ERROR.value
     except Exception:
         record["status"] = ProcessingStatus.PARSE_ERROR.value
