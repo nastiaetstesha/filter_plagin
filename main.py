@@ -1,20 +1,22 @@
 import asyncio
-import aiohttp
-from urllib.parse import urlparse
-from pathlib import Path
-from collections import Counter
+import logging
 import string
+import time
+from contextlib import contextmanager
+from enum import Enum
+from pathlib import Path
+from urllib.parse import urlparse
+
+import aiohttp
+import pymorphy3
 from anyio import create_task_group, run as anyio_run
+from async_timeout import timeout as async_timeout
 from bs4 import BeautifulSoup
 
-import pymorphy3
 from adapters import SANITIZERS, ArticleNotFound
 from text_tools import split_by_words, calculate_jaundice_rate
-from enum import Enum
-from async_timeout import timeout as async_timeout
 
 
-# CHARGED_WORDS = ["скандал", "шок", "сенсация", "катастрофа", "позор", "триумф", "отстаивать", "санкции"]
 class ProcessingStatus(Enum):
     OK = "OK"
     FETCH_ERROR = "FETCH_ERROR"
@@ -22,7 +24,7 @@ class ProcessingStatus(Enum):
     TIMEOUT = "TIMEOUT"
 
 
-REQUEST_TIMEOUT = 0.05
+REQUEST_TIMEOUT = 30.05
 
 DICT_DIR = Path(__file__).resolve().parent / "charged_dict"
 
@@ -38,6 +40,25 @@ TEST_ARTICLES = [
 ]
 
 
+logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
+logger = logging.getLogger("jaundice-rate")
+
+logging.getLogger().setLevel(logging.INFO)
+logging.getLogger("pymorphy3").setLevel(logging.WARNING)
+logging.getLogger("pymorphy3.opencorpora_dict").setLevel(logging.WARNING)
+logging.getLogger("pymorphy3.opencorpora_dict.wrapper").setLevel(logging.WARNING)
+
+
+# @contextmanager
+# def elapsed_log(label: str):
+#     start = time.monotonic()
+#     try:
+#         yield
+#     finally:
+#         dur = time.monotonic() - start
+#         logger.info("%s за %.2f сек", label, dur)
+
+
 def pick_sanitizer(url: str):
     host = urlparse(url).netloc
     key = host.replace(".", "_").replace("-", "_")
@@ -48,7 +69,8 @@ def pick_sanitizer(url: str):
 
 
 async def fetch(session, url):
-    async with session.get(url) as response:
+    timeout = aiohttp.ClientTimeout(total=REQUEST_TIMEOUT)
+    async with session.get(url, timeout=timeout) as response:
         response.raise_for_status()
         return await response.text()
 
@@ -96,7 +118,8 @@ async def process_article(session, morph, charged_words, url: str, idx: int, res
     """Добавляет в results словарь с полями: url, status, title, score, words_count."""
     record = {
         "idx": idx, "url": url, "status": None,
-        "title": None, "score": None, "words_count": None
+        "title": None, "score": None, "words_count": None,
+        "elapsed": None
     }
     try:
         async with async_timeout(REQUEST_TIMEOUT):
@@ -114,8 +137,15 @@ async def process_article(session, morph, charged_words, url: str, idx: int, res
         title = extract_title(html)
         sanitize = pick_sanitizer(url)
         text = sanitize(html, plaintext=True)
+        start = time.monotonic()
+
         article_words = split_by_words(morph, text)
         score = calculate_jaundice_rate(article_words, charged_words)
+        record["elapsed"] = time.monotonic() - start
+
+        # with elapsed_log(f"Αнализ текста ({title[:40]}...)"):
+        #     article_words = split_by_words(morph, text)
+        #     score = calculate_jaundice_rate(article_words, charged_words)
 
         record.update({
             "status": ProcessingStatus.OK.value,
@@ -129,40 +159,9 @@ async def process_article(session, morph, charged_words, url: str, idx: int, res
         record["status"] = ProcessingStatus.PARSE_ERROR.value
 
     results.append(record)
-# async def process_article(session, morph, charged_words, url: str):
-#     try:
-#         html = await fetch(session, url)
-#         title = extract_title(html)
-
-#         sanitize = pick_sanitizer(url)
-#         text = sanitize(html, plaintext=True)
-
-#         article_words = split_by_words(morph, text)
-#         score = calculate_jaundice_rate(article_words, charged_words)
-
-#         print(f"URL: {url}")
-#         print(f"Заголовок: {title}")
-#         print(f"Рейтинг: {score:.2f}")
-#         print(f"Слов в статье: {len(article_words)}")
-#         print()
-#     except ArticleNotFound:
-#         print(f"URL: {url}\nОшибка: контейнер статьи не найден\n")
-#     except Exception as e:
-#         print(f"URL: {url}\nОшибка: {e}\n")
 
 
 async def main():
-    # url = "https://inosmi.ru/20250917/tramp_sanktsii-274720044.html"
-    # async with aiohttp.ClientSession() as session:
-    #     # html = await fetch(session, 'https://inosmi.ru/20250917/tramp_sanktsii-274720044.html')
-    #     # print(html)
-        
-    #     html = await fetch(session, url)
-    # sanitize = pick_sanitizer(url)
-    # try:
-    #     text = sanitize(html, plaintext=True)
-    # except ArticleNotFound:
-    #     raise SystemExit("Не удалось найти контейнер статьи на странице.")
 
     morph = pymorphy3.MorphAnalyzer()
     charged_words = load_charged_words(DICT_DIR, morph)
@@ -180,7 +179,10 @@ async def main():
         print(f"URL: {rec['url']}")
         print(f"Статус: {rec['status']}")
         print(f"Рейтинг: {rec['score']}")
-        print(f"Слов в статье: {rec['words_count']}\n")
+        print(f"Слов в статье: {rec['words_count']}")
+        if rec["status"] == ProcessingStatus.OK.value and rec.get("elapsed") is not None:
+            logging.info("Анализ закончен за %.2f сек", rec["elapsed"])
+        print()
 
 
 asyncio.run(main())
