@@ -20,7 +20,7 @@ from text_tools import split_by_words, calculate_jaundice_rate
 class ProcessingStatus(Enum):
     OK = "OK"
     FETCH_ERROR = "FETCH_ERROR"
-    PARSE_ERROR = "PARSE_ERROR"
+    PARSING_ERROR = "PARSING_ERROR"
     TIMEOUT = "TIMEOUT"
 
 
@@ -60,6 +60,13 @@ logging.getLogger("pymorphy3.opencorpora_dict.wrapper").setLevel(logging.WARNING
 #         dur = time.monotonic() - start
 #         logger.info("%s за %.2f сек", label, dur)
 
+def is_valid_url(url: str) -> bool:
+    try:
+        p = urlparse(url)
+        return p.scheme in {"http", "https"} and bool(p.netloc)
+    except Exception:
+        return False
+    
 
 def pick_sanitizer(url: str):
     host = urlparse(url).netloc
@@ -117,12 +124,18 @@ def extract_title(html: str) -> str:
 
 
 async def process_article(session, morph, charged_words, url: str, idx: int, results: list):
-    """Добавляет в results словарь с полями: url, status, title, score, words_count."""
+    """Добавляет в results словарь: url, status, title, score, words_count, elapsed."""
     record = {
         "idx": idx, "url": url, "status": None,
         "title": None, "score": None, "words_count": None,
-        "elapsed": None
+        "elapsed": None,
     }
+
+    if not is_valid_url(url):
+        record["status"] = ProcessingStatus.FETCH_ERROR.value
+        results.append(record)
+        return
+
     try:
         async with async_timeout(REQUEST_TIMEOUT):
             html = await fetch(session, url)
@@ -135,42 +148,41 @@ async def process_article(session, morph, charged_words, url: str, idx: int, res
         results.append(record)
         return
 
+    # 2) санитизация
     try:
         title = extract_title(html)
         sanitize = pick_sanitizer(url)
         text = sanitize(html, plaintext=True)
-        start = time.monotonic()
-
-        article_words = split_by_words(morph, text)
-        try:
-            article_words = await asyncio.wait_for(
-                split_by_words(morph, text),
-                timeout=ANALYSIS_TIMEOUT,
-            )
-            score = calculate_jaundice_rate(article_words, charged_words)
-
-            record.update({
-                "status": ProcessingStatus.OK.value,
-                "title": title,
-                "score": score,
-                "words_count": len(article_words),
-            })
-        except asyncio.TimeoutError:
-            record["status"] = ProcessingStatus.TIMEOUT.value
-        finally:
-            record["elapsed"] = time.monotonic() - start
-
-        results.append(record)
-
-        # with elapsed_log(f"Αнализ текста ({title[:40]}...)"):
-        #     article_words = split_by_words(morph, text)
-        #     score = calculate_jaundice_rate(article_words, charged_words)
     except (ValueError, ArticleNotFound):
-        record["status"] = ProcessingStatus.PARSE_ERROR.value
+        record["status"] = ProcessingStatus.PARSING_ERROR.value
+        results.append(record)
+        return
     except Exception:
-        record["status"] = ProcessingStatus.PARSE_ERROR.value
+        record["status"] = ProcessingStatus.PARSING_ERROR.value
+        results.append(record)
+        return
+
+    # 3) анализ с таймаутом (split_by_words — async)
+    start = time.monotonic()
+    try:
+        article_words = await asyncio.wait_for(
+            split_by_words(morph, text),
+            timeout=ANALYSIS_TIMEOUT,
+        )
+        score = calculate_jaundice_rate(article_words, charged_words)
+        record.update({
+            "status": ProcessingStatus.OK.value,
+            "title": title,
+            "score": score,
+            "words_count": len(article_words),
+        })
+    except asyncio.TimeoutError:
+        record["status"] = ProcessingStatus.TIMEOUT.value
+    finally:
+        record["elapsed"] = time.monotonic() - start
 
     results.append(record)
+
 
 
 async def main():

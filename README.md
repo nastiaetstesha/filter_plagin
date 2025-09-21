@@ -34,4 +34,5 @@ python -m pytest adapters/inosmi_ru.py
 python -m pytest text_tools.py
 ```
 
+http://127.0.0.1:8080/?urls=https://ya.ru,https://google.com
 
