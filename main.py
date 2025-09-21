@@ -27,6 +27,7 @@ class ProcessingStatus(Enum):
 REQUEST_TIMEOUT = 30.05
 
 DICT_DIR = Path(__file__).resolve().parent / "charged_dict"
+LARGE_TEXT = Path("samples/war_and_peace.txt").read_text(encoding="utf-8")
 
 TEST_ARTICLES = [
     'https://inosmi.ru/20250920/svo-274757749.html',
@@ -39,6 +40,7 @@ TEST_ARTICLES = [
     'https://inosmi.ru/20250920/iskusstvo-274760103.html'
 ]
 
+ANALYSIS_TIMEOUT = 3.0
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s:%(name)s:%(message)s")
 logger = logging.getLogger("jaundice-rate")
@@ -140,19 +142,29 @@ async def process_article(session, morph, charged_words, url: str, idx: int, res
         start = time.monotonic()
 
         article_words = split_by_words(morph, text)
-        score = calculate_jaundice_rate(article_words, charged_words)
-        record["elapsed"] = time.monotonic() - start
+        try:
+            article_words = await asyncio.wait_for(
+                split_by_words(morph, text),
+                timeout=ANALYSIS_TIMEOUT,
+            )
+            score = calculate_jaundice_rate(article_words, charged_words)
+
+            record.update({
+                "status": ProcessingStatus.OK.value,
+                "title": title,
+                "score": score,
+                "words_count": len(article_words),
+            })
+        except asyncio.TimeoutError:
+            record["status"] = ProcessingStatus.TIMEOUT.value
+        finally:
+            record["elapsed"] = time.monotonic() - start
+
+        results.append(record)
 
         # with elapsed_log(f"Αнализ текста ({title[:40]}...)"):
         #     article_words = split_by_words(morph, text)
         #     score = calculate_jaundice_rate(article_words, charged_words)
-
-        record.update({
-            "status": ProcessingStatus.OK.value,
-            "title": title,
-            "score": score,
-            "words_count": len(article_words),
-        })
     except (ValueError, ArticleNotFound):
         record["status"] = ProcessingStatus.PARSE_ERROR.value
     except Exception:

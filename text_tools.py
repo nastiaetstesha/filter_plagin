@@ -4,6 +4,7 @@ except ImportError:
     import pymorphy2
 
 '''AttributeError: module 'inspect' has no attribute 'getargspec'. Did you mean: 'getargs'?'''
+import asyncio
 import string
 
 
@@ -14,25 +15,34 @@ def _clean_word(word):
     return word
 
 
-def split_by_words(morph, text):
-    """Учитывает знаки пунктуации, регистр и словоформы, выкидывает предлоги."""
+# def split_by_words(morph, text):
+#     """Учитывает знаки пунктуации, регистр и словоформы, выкидывает предлоги."""
+#     words = []
+#     for word in text.split():
+#         cleaned_word = _clean_word(word)
+#         normalized_word = morph.parse(cleaned_word)[0].normal_form
+#         if len(normalized_word) > 2 or normalized_word == 'не':
+#             words.append(normalized_word)
+#     return words
+async def split_by_words(morph, text, yield_every: int = 500):
+    """Асинхронно разбивает текст на леммы.
+    """
     words = []
-    for word in text.split():
+    for i, word in enumerate(text.split()):
         cleaned_word = _clean_word(word)
         normalized_word = morph.parse(cleaned_word)[0].normal_form
         if len(normalized_word) > 2 or normalized_word == 'не':
             words.append(normalized_word)
+
+        if yield_every and i % yield_every == 0:
+            await asyncio.sleep(0)
     return words
 
 
 def test_split_by_words():
-    # Экземпляры MorphAnalyzer занимают 10-15Мб RAM т.к. загружают в память много данных
-    # Старайтесь организовать свой код так, чтоб создавать экземпляр MorphAnalyzer заранее и в единственном числе
     morph = pymorphy2.MorphAnalyzer()
-
-    assert split_by_words(morph, 'Во-первых, он хочет, чтобы') == ['во-первых', 'хотеть', 'чтобы']
-
-    assert split_by_words(morph, '«Удивительно, но это стало началом!»') == ['удивительно', 'это', 'стать', 'начало']
+    assert asyncio.run(split_by_words(morph, 'Во-первых, он хочет, чтобы')) == ['во-первых', 'хотеть', 'чтобы']
+    assert asyncio.run(split_by_words(morph, '«Удивительно, но это стало началом!»')) == ['удивительно', 'это', 'стать', 'начало']
 
 
 def calculate_jaundice_rate(article_words, charged_words):
