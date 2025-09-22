@@ -1,5 +1,5 @@
 try:
-    import pymorphy3 as pymorphy2  # подменяем имя, чтобы тесты не менять
+    import pymorphy3 as pymorphy2
 except ImportError:
     import pymorphy2
 

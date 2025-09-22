@@ -22,6 +22,18 @@ pip install -r requirements.txt
 python main.py
 ```
 
+
+Скрипт:
+
+- скачивает статьи,
+
+- очищает HTML через адаптер,
+
+- считает рейтинг и печатает результат,
+
+- обрабатывает исключения (FETCH_ERROR, PARSING_ERROR, TIMEOUT),
+
+логирует длительность анализа.
 # Как запустить тесты
 
 Для тестирования используется [pytest](https://docs.pytest.org/en/latest/), тестами покрыты фрагменты кода сложные в отладке: text_tools.py и адаптеры. Команды для запуска тестов:
@@ -34,13 +46,31 @@ python -m pytest adapters/inosmi_ru.py
 python -m pytest text_tools.py
 ```
 
+
+`
+### Запуск тестов server.py
+Тесты покрывают:
+
+- ошибки скачивания/парсинга,
+- работу таймаутов анализа,
+- серверный лимит по количеству URL.
+```
+python -m pytest -q
+```
+### Веб-сервер
+```
+python server.py
+```
+Эндпоинты:
+
+- GET / — справка
+
+- GET /healthz — health-check
+
+- GET /analyze?urls=<url1>,<url2>,... — анализ списка ссылок
+
 http://127.0.0.1:8080/?urls=https://ya.ru,https://google.com
 
 #### Запрос для кейса, где отправляется много запросов
 
 `http://127.0.0.1:8080/analyze?urls=https://inosmi.ru/politic/20190629/245379301.html,https://inosmi.ru/politic/20190629/245379302.html,https://inosmi.ru/politic/20190629/245379303.html,https://inosmi.ru/politic/20190629/245379304.html,https://inosmi.ru/politic/20190629/245379305.html,https://inosmi.ru/politic/20190629/245379306.html,https://inosmi.ru/politic/20190629/245379307.html,https://inosmi.ru/politic/20190629/245379308.html,https://inosmi.ru/politic/20190629/245379309.html,https://inosmi.ru/politic/20190629/245379310.html,https://inosmi.ru/politic/20190629/245379311.html
-`
-### Запуск тестов server.py
-```
-python -m pytest -q
-```

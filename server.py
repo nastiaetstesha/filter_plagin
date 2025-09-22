@@ -6,6 +6,7 @@ from typing import List
 
 import aiohttp
 from aiohttp import web
+from anyio import create_task_group
 import pymorphy3
 
 from main import (
@@ -40,9 +41,13 @@ async def call_process(url: str, session: aiohttp.ClientSession, morph, charged_
     }
 
 
+async def _run_one(url, session, morph, charged_words, results):
+    rec = await call_process(url, session, morph, charged_words)
+    results.append(rec)
+
+
 async def analyze_handler(request: web.Request, morph, charged_words):
 
-    urls = parse_urls_param(request)
     urls = parse_urls_param(request)
     if not urls:
         return web.json_response({"error": "query parameter 'urls' is required"}, status=400)
@@ -52,12 +57,12 @@ async def analyze_handler(request: web.Request, morph, charged_words):
             {"error": f"too many urls in request, should be {MAX_URLS} or less"},
             status=400,
         )
-    if not urls:
-        return web.json_response({"error": "query parameter 'urls' is required"}, status=400)
 
+    results: list[dict] = []
     async with aiohttp.ClientSession() as session:
-        tasks = [call_process(url, session, morph, charged_words) for url in urls]
-        results = await asyncio.gather(*tasks, return_exceptions=False)
+        async with create_task_group() as tg:
+            for url in urls:
+                tg.start_soon(_run_one, url, session, morph, charged_words, results)
 
     return web.json_response(results)
 

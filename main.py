@@ -27,7 +27,7 @@ class ProcessingStatus(Enum):
 REQUEST_TIMEOUT = 30.05
 
 DICT_DIR = Path(__file__).resolve().parent / "charged_dict"
-LARGE_TEXT = Path("samples/war_and_peace.txt").read_text(encoding="utf-8")
+# LARGE_TEXT = Path("samples/war_and_peace.txt").read_text(encoding="utf-8")
 
 TEST_ARTICLES = [
     'https://inosmi.ru/20250920/svo-274757749.html',
@@ -50,15 +50,6 @@ logging.getLogger("pymorphy3").setLevel(logging.WARNING)
 logging.getLogger("pymorphy3.opencorpora_dict").setLevel(logging.WARNING)
 logging.getLogger("pymorphy3.opencorpora_dict.wrapper").setLevel(logging.WARNING)
 
-
-# @contextmanager
-# def elapsed_log(label: str):
-#     start = time.monotonic()
-#     try:
-#         yield
-#     finally:
-#         dur = time.monotonic() - start
-#         logger.info("%s за %.2f сек", label, dur)
 
 def is_valid_url(url: str) -> bool:
     try:

@@ -8,6 +8,8 @@ from main import (
     ProcessingStatus,
     ANALYSIS_TIMEOUT,
 )
+from server import create_app, MAX_URLS
+from aiohttp.test_utils import TestServer, TestClient
 
 
 class DummySession:
@@ -95,3 +97,36 @@ def test_process_article_timeout(monkeypatch):
 
     assert rec["status"] == ProcessingStatus.TIMEOUT.value
     assert rec["score"] is None and rec["words_count"] is None
+
+
+async def _request(app, path: str):
+    server = TestServer(app)
+    await server.start_server()
+    try:
+        client = TestClient(server)
+        await client.start_server()
+        try:
+            resp = await client.get(path)
+            status = resp.status
+            data = await resp.json()
+            await resp.release()
+            return status, data
+        finally:
+            await client.close()
+    finally:
+        await server.close()
+
+
+def test_analyze_limit():
+    app = create_app()
+    many = ",".join(f"https://inosmi.ru/a{i}.html" for i in range(MAX_URLS + 1))
+    status, data = asyncio.run(_request(app, f"/analyze?urls={many}"))
+    assert status == 400
+    assert "too many urls" in data["error"]
+
+
+def test_analyze_missing_param():
+    app = create_app()
+    status, data = asyncio.run(_request(app, "/analyze"))
+    assert status == 400
+    assert "query parameter 'urls' is required" in data["error"]
