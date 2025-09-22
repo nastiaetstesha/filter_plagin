@@ -40,3 +40,7 @@ http://127.0.0.1:8080/?urls=https://ya.ru,https://google.com
 
 `http://127.0.0.1:8080/analyze?urls=https://inosmi.ru/politic/20190629/245379301.html,https://inosmi.ru/politic/20190629/245379302.html,https://inosmi.ru/politic/20190629/245379303.html,https://inosmi.ru/politic/20190629/245379304.html,https://inosmi.ru/politic/20190629/245379305.html,https://inosmi.ru/politic/20190629/245379306.html,https://inosmi.ru/politic/20190629/245379307.html,https://inosmi.ru/politic/20190629/245379308.html,https://inosmi.ru/politic/20190629/245379309.html,https://inosmi.ru/politic/20190629/245379310.html,https://inosmi.ru/politic/20190629/245379311.html
 `
+### Запуск тестов server.py
+```
+python -m pytest -q
+```
