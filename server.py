@@ -15,6 +15,9 @@ from main import (
 )
 
 
+MAX_URLS = 10
+
+
 def parse_urls_param(request: web.Request) -> List[str]:
     raw = request.query.get("urls", "")
     return [u.strip() for u in raw.split(",") if u.strip()]
@@ -40,6 +43,15 @@ async def call_process(url: str, session: aiohttp.ClientSession, morph, charged_
 async def analyze_handler(request: web.Request, morph, charged_words):
 
     urls = parse_urls_param(request)
+    urls = parse_urls_param(request)
+    if not urls:
+        return web.json_response({"error": "query parameter 'urls' is required"}, status=400)
+
+    if len(urls) > MAX_URLS:
+        return web.json_response(
+            {"error": f"too many urls in request, should be {MAX_URLS} or less"},
+            status=400,
+        )
     if not urls:
         return web.json_response({"error": "query parameter 'urls' is required"}, status=400)
 
